@@ -29,7 +29,9 @@ Route::prefix('auth')->name('auth.')->group(function () {
 });
 
 // Products — readable publicly
+// NFR — Distributed Caching: قائمة المنتجات وتفاصيلها تُخدَم من Redis لتقليل استعلامات قاعدة البيانات
 Route::get('products', [ProductController::class, 'index'])->name('products.index');
+Route::get('products/popular', [ProductController::class, 'popular'])->name('products.popular');
 Route::get('products/{product}', [ProductController::class, 'show'])->name('products.show');
 
 // Protected routes — Sanctum authentication required
