@@ -18,6 +18,8 @@ class ProductResource extends JsonResource
             'stock_quantity' => $this->stock_quantity,
             'is_active'      => $this->is_active,
             'in_stock'       => $this->stock_quantity > 0,
+            // Optimistic-locking token — echo this back when adjusting stock.
+            'lock_version'   => $this->lock_version,
         ];
     }
 }

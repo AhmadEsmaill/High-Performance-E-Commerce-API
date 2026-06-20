@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Exceptions\PaymentFailedException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Order\PlaceOrderRequest;
 use App\Http\Resources\OrderResource;
@@ -70,6 +71,9 @@ class OrderController extends Controller
             $order->load('items.product');
 
             return $this->created(new OrderResource($order), 'Order placed successfully.');
+        } catch (PaymentFailedException $e) {
+            // Payment declined → the whole transaction rolled back (no stock taken, no order).
+            return $this->error($e->getMessage(), 402);
         } catch (\RuntimeException $e) {
             return $this->error($e->getMessage(), 409);
         }

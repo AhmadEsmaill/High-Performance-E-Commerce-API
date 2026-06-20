@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Exceptions\StaleStockException;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ProductResource;
 use App\Models\Product;
@@ -30,11 +31,21 @@ class InventoryController extends Controller
 
     public function adjust(Request $request, Product $product): JsonResponse
     {
+        // Optimistic locking: the client must send the lock_version it last read.
         $validated = $request->validate([
-            'quantity' => ['required', 'integer', 'min:0'],
+            'quantity'     => ['required', 'integer', 'min:0'],
+            'lock_version' => ['required', 'integer', 'min:0'],
         ]);
 
-        $product = $this->inventoryService->adjustStock($product->id, $validated['quantity']);
+        try {
+            $product = $this->inventoryService->adjustStock(
+                $product->id,
+                $validated['quantity'],
+                $validated['lock_version'],
+            );
+        } catch (StaleStockException $e) {
+            return $this->error($e->getMessage(), 409, ['current_version' => $e->currentVersion]);
+        }
 
         return $this->success(new ProductResource($product), 'Stock adjusted.');
     }

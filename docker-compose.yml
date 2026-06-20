@@ -1,0 +1,103 @@
+# ---------------------------------------------------------------------------
+# Real horizontal load distribution for the e-commerce API:
+#   nginx     -> load balancer (upstream over app-1/2/3)
+#   app-1/2/3 -> three identical Laravel (PHP-FPM) instances
+#   horizon   -> Laravel Horizon, distributes queue jobs across workers (Redis)
+#   redis     -> cache + queue + Horizon backend
+#   mysql     -> database
+#
+# Usage:
+#   docker compose up -d --build
+#   docker compose exec app-1 php artisan migrate
+#   open http://localhost:8080            (API, load-balanced)
+#   open http://localhost:8080/horizon    (Horizon dashboard)
+# ---------------------------------------------------------------------------
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: ecom_nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - ./:/var/www/html:ro
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - app-1
+      - app-2
+      - app-3
+    networks: [ecom]
+
+  app-1: &app
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ecom_app
+    restart: unless-stopped
+    environment: &app-env
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: ecommerce
+      DB_USERNAME: ecommerce
+      DB_PASSWORD: secret
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_CLIENT: predis
+      QUEUE_CONNECTION: redis
+      CACHE_STORE: redis
+      SESSION_DRIVER: redis
+    volumes:
+      - ./:/var/www/html
+    depends_on:
+      - redis
+      - mysql
+    networks: [ecom]
+
+  app-2:
+    <<: *app
+    image: ecom_app
+
+  app-3:
+    <<: *app
+    image: ecom_app
+
+  # Three independent Horizon instances. They all pull jobs from the SAME Redis
+  # queue; Redis pops are atomic, so a job is processed by exactly one worker
+  # across all instances — true multi-instance (multi-node) job distribution.
+  horizon-1:
+    <<: *app
+    command: php artisan horizon
+
+  horizon-2:
+    <<: *app
+    command: php artisan horizon
+
+  horizon-3:
+    <<: *app
+    command: php artisan horizon
+
+  redis:
+    image: redis:alpine
+    container_name: ecom_redis
+    networks: [ecom]
+
+  mysql:
+    image: mysql:8
+    container_name: ecom_mysql
+    environment:
+      MYSQL_DATABASE: ecommerce
+      MYSQL_USER: ecommerce
+      MYSQL_PASSWORD: secret
+      MYSQL_ROOT_PASSWORD: secret
+    # No host port mapping: app containers reach MySQL internally at mysql:3306.
+    # (Avoids conflict with a MySQL already running on the host's port 3306.)
+    volumes:
+      - dbdata:/var/lib/mysql
+    networks: [ecom]
+
+volumes:
+  dbdata:
+
+networks:
+  ecom:
+    driver: bridge
