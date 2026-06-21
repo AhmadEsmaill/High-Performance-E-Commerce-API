@@ -48,6 +48,7 @@ services:
       SESSION_DRIVER: redis
     volumes:
       - ./:/var/www/html
+      - ./docker/php/www.conf:/usr/local/etc/php-fpm.d/www.conf:ro
     depends_on:
       - redis
       - mysql

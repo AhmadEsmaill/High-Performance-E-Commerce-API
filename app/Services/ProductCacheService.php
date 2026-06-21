@@ -29,11 +29,27 @@ class ProductCacheService
     /** Redis sorted set holding the request count per product id. */
     private const POPULARITY_KEY = 'products:popularity';
 
+    /** Runtime flag (Redis-backed) used to A/B benchmark the cache layer. */
+    private const ENABLED_FLAG = 'flags:product_cache_enabled';
+
+    /**
+     * Whether the distributed cache is active. Defaults to ON; can be flipped at
+     * runtime (no restart) for benchmarking via Cache::forever(self::ENABLED_FLAG, false).
+     */
+    private function enabled(): bool
+    {
+        return (bool) Cache::get(self::ENABLED_FLAG, true);
+    }
+
     /**
      * Remember a single product detail, keyed by id.
      */
     public function rememberProduct(int $id, Closure $callback): mixed
     {
+        if (! $this->enabled()) {
+            return $callback();
+        }
+
         return Cache::tags(self::TAG)->remember(
             "product:{$id}",
             (int) config('products.detail_ttl'),
@@ -46,6 +62,10 @@ class ProductCacheService
      */
     public function rememberListing(string $signature, Closure $callback): mixed
     {
+        if (! $this->enabled()) {
+            return $callback();
+        }
+
         return Cache::tags(self::TAG)->remember(
             "products:list:{$signature}",
             (int) config('products.listing_ttl'),
