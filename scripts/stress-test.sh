@@ -39,7 +39,10 @@ echo "# TEST B — DATA INTEGRITY: $CONC concurrent restock(+1), $B_REQUESTS wri
 echo "#          POST /api/inventory/$PID/restock  (pessimistic lock)"
 echo "############################################################"
 echo '{"quantity":1}' > "$OUT/body.json"
-ab -n "$B_REQUESTS" -c "$CONC" -p "$OUT/body.json" -T application/json \
+# -l : accept variable response length. Each restock returns a different
+#      stock_quantity, so without -l ApacheBench miscounts these 200-OK
+#      responses as "failed" purely due to differing body length.
+ab -l -n "$B_REQUESTS" -c "$CONC" -p "$OUT/body.json" -T application/json \
    -H "Accept: application/json" -H "Authorization: Bearer $TOKEN" \
    "$BASE/api/inventory/$PID/restock" > "$OUT/testB.txt" 2>&1
 grep -E "Complete requests|Failed requests|Non-2xx|Requests per second|Time per request:|^  95%|^  99%|^ 100%" "$OUT/testB.txt"
